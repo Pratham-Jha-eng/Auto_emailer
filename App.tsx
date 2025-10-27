@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { ReportRow, SubBottlerGroup, EmailDraft, EmailMappings } from './types';
 import { FileUpload } from './components/FileUpload';
@@ -31,17 +30,30 @@ export default function App() {
         if (!e.target?.result) {
           throw new Error("Could not read the file content.");
         }
-        const data = new Uint8Array(e.target.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+
+        let workbook;
+        const fileType = file.type;
+        const fileName = file.name.toLowerCase();
+
+        if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
+          // Handle CSV: XLSX.read needs a string
+          const csvData = e.target.result as string;
+          workbook = XLSX.read(csvData, { type: 'string' });
+        } else {
+          // Handle Excel: XLSX.read needs an ArrayBuffer
+          const data = new Uint8Array(e.target.result as ArrayBuffer);
+          workbook = XLSX.read(data, { type: 'array' });
+        }
+        
         const sheetName = workbook.SheetNames[0];
         if (!sheetName) {
-            throw new Error("The Excel file does not contain any sheets.");
+            throw new Error("The file does not contain any sheets.");
         }
         const worksheet = workbook.Sheets[sheetName];
         const json: any[] = XLSX.utils.sheet_to_json(worksheet);
 
         if (json.length === 0) {
-          throw new Error("The uploaded Excel file is empty or in an unsupported format.");
+          throw new Error("The uploaded file is empty or in an unsupported format.");
         }
 
         // Normalize all keys to be lowercase and trimmed for consistent access
@@ -61,7 +73,7 @@ export default function App() {
         
         for (const col of requiredColumns) {
             if (!availableColumns.includes(col)) {
-                throw new Error(`The Excel file is missing the required column: '${col}'. Please ensure your column headers are correct. Found headers: [${availableColumns.join(', ')}].`);
+                throw new Error(`The file is missing the required column: '${col}'. Please ensure your column headers are correct. Found headers: [${availableColumns.join(', ')}].`);
             }
         }
         
@@ -82,7 +94,13 @@ export default function App() {
       setError('Failed to read the file. It might be corrupted or in use by another program.');
       setIsLoading(false);
     };
-    reader.readAsArrayBuffer(file);
+
+    // New logic: Read CSV as text, otherwise read as ArrayBuffer
+    if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
   }, []);
 
   useEffect(() => {
@@ -195,7 +213,7 @@ export default function App() {
           </h1>
           <p className="mt-2 text-lg text-slate-600 dark:text-slate-400">
             Automate your reporting workflow with AI-powered email drafting.
-          </p>
+          </all>
         </header>
 
         <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 mb-8 border border-slate-200 dark:border-slate-700">
@@ -207,7 +225,7 @@ export default function App() {
             Due to web browser security policies, this app cannot directly log into websites or access your downloaded files automatically. Instead, this tool automates the most time-consuming parts of your workflow:
           </p>
           <ol className="list-decimal list-inside space-y-2 text-slate-600 dark:text-slate-400">
-            <li>Manually download the report Excel file from your admin panel.</li>
+            <li>Manually download the report Excel or CSV file from your admin panel.</li>
             <li>Upload the file below. The app will process it in your browser—no data is sent to a server.</li>
             <li>The app cleans the data, groups it by sub-bottler, and uses AI to generate a draft email for each group.</li>
             <li>Review the drafts, map sub-bottlers to recipient emails, and click to open them in your default email client.</li>

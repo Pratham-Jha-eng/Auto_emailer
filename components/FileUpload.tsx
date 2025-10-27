@@ -7,10 +7,11 @@ interface FileUploadProps {
   isLoading: boolean;
 }
 
-const ALLOWED_EXTENSIONS = ['.xlsx', '.xls'];
+const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv'];
 const ALLOWED_MIME_TYPES = [
     'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv'
 ];
 
 export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onFileError, isLoading }) => {
@@ -18,10 +19,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onFileErro
 
   const validateFile = (file: File): boolean => {
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
-    if (ALLOWED_EXTENSIONS.includes(fileExtension) && ALLOWED_MIME_TYPES.includes(file.type)) {
+    // Check extension OR MIME type for flexibility
+    if (ALLOWED_EXTENSIONS.includes(fileExtension) || ALLOWED_MIME_TYPES.includes(file.type)) {
         return true;
     }
-    onFileError(`Invalid file type. Please upload a valid Excel file (${ALLOWED_EXTENSIONS.join(', ')}).`);
+    onFileError(`Invalid file type. Please upload an Excel or CSV file (${ALLOWED_EXTENSIONS.join(', ')}).`);
     return false;
   };
 
@@ -79,7 +81,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, onFileErro
         <div className="text-center">
           <UploadIcon className="mx-auto h-12 w-12 text-slate-400" />
           <p className="mt-4 text-lg font-semibold text-slate-700 dark:text-slate-300">
-            Drag & drop your Excel file here
+            Drag & drop your Excel or CSV file here
           </p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             or click to select a file
