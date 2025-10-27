@@ -24,6 +24,24 @@ export default function App() {
     setProcessedGroups(null);
     setEmailDrafts({});
 
+    // --- NEW HELPER FUNCTION ---
+    // This function will format JavaScript Date objects into DD-MM-YYYY
+    const formatDate = (date: any): string => {
+      if (date instanceof Date) {
+        // Check if the date is valid
+        if (isNaN(date.getTime())) {
+          return "Invalid Date";
+        }
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+      // If it's not a date, just convert it to a string
+      return String(date ?? ''); // Handle null/undefined
+    };
+    // --- END HELPER FUNCTION ---
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -38,11 +56,13 @@ export default function App() {
         if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
           // Handle CSV: XLSX.read needs a string
           const csvData = e.target.result as string;
-          workbook = XLSX.read(csvData, { type: 'string' });
+          // --- UPDATED --- Add { cellDates: true }
+          workbook = XLSX.read(csvData, { type: 'string', cellDates: true });
         } else {
           // Handle Excel: XLSX.read needs an ArrayBuffer
           const data = new Uint8Array(e.target.result as ArrayBuffer);
-          workbook = XLSX.read(data, { type: 'array' });
+          // --- UPDATED --- Add { cellDates: true }
+          workbook = XLSX.read(data, { type: 'array', cellDates: true });
         }
         
         const sheetName = workbook.SheetNames[0];
@@ -50,7 +70,10 @@ export default function App() {
             throw new Error("The file does not contain any sheets.");
         }
         const worksheet = workbook.Sheets[sheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+        
+        // --- UPDATED --- Add { cellDates: true }
+        // This will now convert Excel date numbers into JavaScript Date objects
+        const json: any[] = XLSX.utils.sheet_to_json(worksheet, { cellDates: true });
 
         if (json.length === 0) {
           throw new Error("The uploaded file is empty or in an unsupported format.");
@@ -77,13 +100,31 @@ export default function App() {
             }
         }
         
-        // FIX: When spreading an object of type `any` (`row`), TypeScript cannot infer its properties, leading to a "missing 'bottler'" error.
-        // By explicitly adding `bottler` to the new object and ensuring both `bottler` and `subbottler` are strings, we satisfy the `ReportRow` type definition.
-        const cleanedRows: ReportRow[] = normalizedJson.map(row => ({
-          ...row,
-          bottler: String(row.bottler),
-          subbottler: String((String(row['sub-bottler']).toUpperCase() === 'NAN' || !row['sub-bottler']) ? row.bottler : row['sub-bottler']),
-        }));
+        // --- UPDATED ---
+        // We now map over the data and use our formatDate function
+        const cleanedRows: ReportRow[] = normalizedJson.map(row => {
+          // Create a copy of the row to avoid overwriting Date objects
+          const newRow: any = {};
+
+          // Iterate over all keys and format dates
+          for (const key in row) {
+             if (Object.prototype.hasOwnProperty.call(row, key)) {
+                if (key === 'installed date' || key === 'last hit') {
+                  newRow[key] = formatDate(row[key]);
+                } else {
+                  // Ensure all other values are strings
+                  newRow[key] = String(row[key] ?? '');
+                }
+             }
+          }
+
+          // Special handling for subbottler logic
+          newRow.subbottler = String((String(row['sub-bottler']).toUpperCase() === 'NAN' || !row['sub-bottler']) ? (row.bottler ?? '') : row['sub-bottler']);
+          newRow.bottler = String(row.bottler ?? '');
+          
+          return newRow as ReportRow;
+        });
+
         setReportRows(cleanedRows);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred while parsing the file.');
