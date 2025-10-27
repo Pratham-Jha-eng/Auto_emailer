@@ -1,0 +1,5 @@
+{
+  "name": "Intelligent Report Mailer",
+  "description": "An intelligent assistant to process business reports from Excel files. It automatically cleans data, groups information by sub-bottler, and uses AI to draft professional emails for each group, streamlining your reporting workflow.",
+  "requestFramePermissions": []
+}
