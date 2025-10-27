@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 import { SubBottlerGroup, EmailMappings, EmailDraft, ReportRow } from '../types';
 import { EmailIcon, ResetIcon, EditIcon, CheckIcon, DownloadIcon, RegenerateIcon, WarningIcon } from './Icons';
 
+// New Icon for Sending
+const SendIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.875L6 12zM6 12h9" />
+  </svg>
+);
+
 interface ReportDashboardProps {
   groups: SubBottlerGroup[];
   emailMappings: EmailMappings;
@@ -66,6 +73,9 @@ const EmailMappingEditor: React.FC<{
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailMappings, setEmailMappings, emailDrafts, onReset, onRegenerateAll, onRegenerateSingle }) => {
   
   const [copiedGroup, setCopiedGroup] = useState<string | null>(null);
+  // --- NEW STATE for tracking sending status ---
+  const [sendingState, setSendingState] = useState<Record<string, 'idle' | 'loading' | 'sent' | 'error'>>({});
+
 
   const handleSaveEmail = (groupName: string, email: string) => {
     setEmailMappings(prev => ({ ...prev, [groupName]: email }));
@@ -117,6 +127,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
     URL.revokeObjectURL(url);
   };
 
+  // --- EXISTING "COPY" FUNCTION ---
   const handleEmailClick = (e: React.MouseEvent<HTMLAnchorElement>, groupName: string) => {
     e.preventDefault();
     
@@ -160,6 +171,52 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
     }
   };
 
+  // --- NEW "SEND" FUNCTION ---
+  const handleSendEmail = async (groupName: string) => {
+    const recipientEmail = emailMappings[groupName] || '';
+    const draft = emailDrafts[groupName];
+
+    if (!recipientEmail) {
+      alert("Please set a recipient email first.");
+      return;
+    }
+    if (!draft || typeof draft === 'string') {
+      alert("Email draft is not ready.");
+      return;
+    }
+
+    setSendingState(prev => ({ ...prev, [groupName]: 'loading' }));
+
+    try {
+      // This calls the file at /api/send-email.ts
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draft: draft,
+          recipientEmail: recipientEmail,
+        }),
+      });
+
+      if (!response.ok) {
+        const { error } = await response.json();
+        throw new Error(error || 'Failed to send email');
+      }
+      
+      setSendingState(prev => ({ ...prev, [groupName]: 'sent' }));
+      // Reset button after 3 seconds
+      setTimeout(() => setSendingState(prev => ({ ...prev, [groupName]: 'idle' })), 3000);
+
+    } catch (error: any) {
+      console.error(error);
+      alert(`Error: ${error.message}`);
+      setSendingState(prev => ({ ...prev, [groupName]: 'error' }));
+      // Reset button after 3 seconds
+      setTimeout(() => setSendingState(prev => ({ ...prev, [groupName]: 'idle' })), 3000);
+    }
+  };
+
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -186,6 +243,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
         {groups.map((group) => {
           const draft = emailDrafts[group.name];
           const recipientEmail = emailMappings[group.name] || '';
+          const currentSendingState = sendingState[group.name] || 'idle';
           
           return (
             <div key={group.name} className="bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
@@ -227,7 +285,10 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
                         <p className="font-medium text-sm text-slate-800 dark:text-slate-200">{draft.subject}</p>
                      </div>
                      <div className="prose prose-sm max-w-none text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-md p-3 max-h-60 overflow-y-auto flex-grow" dangerouslySetInnerHTML={{ __html: draft.body }} />
+                     
+                     {/* --- BUTTON GROUP --- */}
                      <div className="flex flex-wrap gap-2 pt-2">
+                        {/* --- EXISTING "COPY" BUTTON --- */}
                         <a
                             href="#"
                             rel="noopener noreferrer"
@@ -248,6 +309,33 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
                             </>
                           )}
                         </a>
+
+                        {/* --- NEW "SEND" BUTTON --- */}
+                        <button
+                          onClick={() => handleSendEmail(group.name)}
+                          disabled={!recipientEmail || currentSendingState === 'loading' || currentSendingState === 'sent'}
+                          className={`inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${
+                            !recipientEmail ? 'bg-slate-400 cursor-not-allowed' :
+                            currentSendingState === 'loading' ? 'bg-yellow-500 cursor-wait' :
+                            currentSendingState === 'sent' ? 'bg-green-500 cursor-not-allowed' :
+                            currentSendingState === 'error' ? 'bg-red-500' :
+                            'bg-teal-600 hover:bg-teal-700'
+                          }`}
+                          style={{ minWidth: '130px' }}
+                        >
+                          {currentSendingState === 'loading' && (
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          )}
+                          {currentSendingState === 'idle' && <><SendIcon /> Send Email</>}
+                          {currentSendingState === 'loading' && 'Sending...'}
+                          {currentSendingState === 'sent' && <><CheckIcon /> Sent!</>}
+                          {currentSendingState === 'error' && <><WarningIcon className="w-5 h-5" /> Retry</>}
+                        </button>
+                     </div>
+                     <div className="flex flex-wrap gap-2 pt-2">
                          <button
                             onClick={() => handleDownloadCSV(group.rows, group.name)}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-200 dark:bg-slate-700 rounded-md hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
