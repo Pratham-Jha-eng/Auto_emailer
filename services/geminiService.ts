@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { ReportRow, EmailDraft } from '../types';
 
@@ -41,7 +40,25 @@ if (!apiKey) {
 
 // 3. Pass the apiKey variable to the client
 const ai = new GoogleGenAI({ apiKey: apiKey });
-  const htmlTable = dataToHtmlTable(data);
+
+  // --- NEW SORTING LOGIC ---
+  // Sort the data by "days from last hit" in descending order
+  // We use [...data] to create a copy and not mutate the original array.
+  const sortedData = [...data].sort((a, b) => {
+    // Column name is normalized to lowercase in App.tsx, so we use that.
+    const key = "days from last hit"; 
+    
+    // Default to 0 if the value is missing or not a number
+    const valA = Number(a[key]) || 0; 
+    const valB = Number(b[key]) || 0;
+    
+    // (b - a) gives descending order
+    return valB - valA;
+  });
+  // --- END OF NEW LOGIC ---
+
+  // Pass the newly sortedData to the table builder
+  const htmlTable = dataToHtmlTable(sortedData);
   const subject = `Weekly Report for ${subBottlerName}`;
 
   const prompt = `
