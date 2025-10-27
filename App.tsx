@@ -213,7 +213,7 @@ export default function App() {
           </h1>
           <p className="mt-2 text-lg text-slate-600 dark:text-slate-400">
             Automate your reporting workflow with AI-powered email drafting.
-          </all>
+          </p>
         </header>
 
         <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-lg shadow-xl p-6 mb-8 border border-slate-200 dark:border-slate-700">
