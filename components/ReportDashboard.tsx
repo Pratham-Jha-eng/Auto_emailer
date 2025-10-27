@@ -65,6 +65,8 @@ const EmailMappingEditor: React.FC<{
 
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailMappings, setEmailMappings, emailDrafts, onReset, onRegenerateAll, onRegenerateSingle }) => {
   
+  const [copiedGroup, setCopiedGroup] = useState<string | null>(null);
+
   const handleSaveEmail = (groupName: string, email: string) => {
     setEmailMappings(prev => ({ ...prev, [groupName]: email }));
   };
@@ -115,6 +117,49 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
     URL.revokeObjectURL(url);
   };
 
+  const handleEmailClick = (e: React.MouseEvent<HTMLAnchorElement>, groupName: string) => {
+    e.preventDefault();
+    
+    const recipientEmail = emailMappings[groupName] || '';
+    const draft = emailDrafts[groupName];
+
+    if (!recipientEmail || !draft || typeof draft === 'string') {
+      return;
+    }
+
+    // 1. Create the mailto link *without* the body
+    const mailtoLink = `mailto:${recipientEmail}?subject=${encodeURIComponent(draft.subject)}`;
+
+    // 2. Create the HTML content for the clipboard
+    // We must use this complex method to copy actual HTML, not just the text of the tags.
+    try {
+      const blob = new Blob([draft.body], { type: 'text/html' });
+      const data = [new ClipboardItem({ 'text/html': blob })];
+      
+      navigator.clipboard.write(data).then(
+        () => {
+          // 3. On success, open the email client
+          window.location.href = mailtoLink;
+          // (Optional) Set a temporary state to show a "Copied!" message
+          setCopiedGroup(groupName);
+          setTimeout(() => setCopiedGroup(null), 2000);
+        },
+        (err) => {
+          console.error('Failed to copy HTML to clipboard:', err);
+          // Fallback for older browsers: just copy the text content
+          navigator.clipboard.writeText(draft.body).then(() => {
+              window.location.href = mailtoLink;
+          });
+        }
+      );
+    } catch (err) {
+      console.error('Clipboard API error:', err);
+      // Final fallback if ClipboardItem is not supported
+      alert("Could not copy HTML. Opening email client - please copy the content manually.");
+      window.location.href = mailtoLink;
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -141,9 +186,6 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
         {groups.map((group) => {
           const draft = emailDrafts[group.name];
           const recipientEmail = emailMappings[group.name] || '';
-          const mailtoLink = draft && typeof draft !== 'string' 
-            ? `mailto:${recipientEmail}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}` 
-            : '';
           
           return (
             <div key={group.name} className="bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col">
@@ -187,15 +229,24 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({ groups, emailM
                      <div className="prose prose-sm max-w-none text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-md p-3 max-h-60 overflow-y-auto flex-grow" dangerouslySetInnerHTML={{ __html: draft.body }} />
                      <div className="flex flex-wrap gap-2 pt-2">
                         <a
-                            href={mailtoLink}
-                            target="_blank"
+                            href="#"
                             rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${!recipientEmail ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                            className={`inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${!recipientEmail ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                            style={{ minWidth: '190px' }} // Prevents layout jump
                             aria-disabled={!recipientEmail}
-                            onClick={(e) => !recipientEmail && e.preventDefault()}
+                            onClick={(e) => handleEmailClick(e, group.name)}
                         >
-                            <EmailIcon />
-                            Open in Email Client
+                          {copiedGroup === group.name ? (
+                            <>
+                              <CheckIcon className="w-5 h-5" />
+                              Copied! Just Paste.
+                            </>
+                          ) : (
+                            <>
+                              <EmailIcon />
+                              Open & Copy Email
+                            </>
+                          )}
                         </a>
                          <button
                             onClick={() => handleDownloadCSV(group.rows, group.name)}
