@@ -31,12 +31,16 @@ const cleanHtmlBody = (rawBody: string): string => {
 
 
 export const generateEmailDraft = async (subBottlerName: string, data: ReportRow[]): Promise<EmailDraft> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set. Please configure it before proceeding.");
-  }
-  
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // 1. Use import.meta.env.VITE_GEMINI_API_KEY
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
+if (!apiKey) {
+  // 2. Update the error message to be correct
+  throw new Error("VITE_GEMINI_API_KEY environment variable not set. Please configure it before proceeding.");
+}
+
+// 3. Pass the apiKey variable to the client
+const ai = new GoogleGenAI({ apiKey: apiKey });
   const htmlTable = dataToHtmlTable(data);
   const subject = `Weekly Report for ${subBottlerName}`;
 
