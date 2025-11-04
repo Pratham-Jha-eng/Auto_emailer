@@ -46,7 +46,7 @@ const ai = new GoogleGenAI({ apiKey: apiKey });
   // We use [...data] to create a copy and not mutate the original array.
   const sortedData = [...data].sort((a, b) => {
     // Column name is normalized to lowercase in App.tsx, so we use that.
-    const key = "days from last hit"; 
+    const key = "days-from-last-hit"; 
     
     // Default to 0 if the value is missing or not a number
     const valA = Number(a[key]) || 0; 
