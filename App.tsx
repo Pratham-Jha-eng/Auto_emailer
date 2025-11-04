@@ -54,14 +54,28 @@ export default function App() {
         const fileName = file.name.toLowerCase();
 
         if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
-          // Handle CSV: XLSX.read needs a string
-          const csvData = e.target.result as string;
-          // --- UPDATED --- Add { cellDates: true }
+          // --- START OF AIRTIGHT PRE-PROCESSING ---
+          let csvData = e.target.result as string;
+          
+          // 1. Remove Byte Order Mark (BOM)
+          // This invisible character (\uFEFF) breaks parsing.
+          csvData = csvData.replace(/^\uFEFF/, ''); 
+
+          // 2. Sniff for and normalize delimiters
+          // Check the first line for semicolons instead of commas.
+          const firstLine = csvData.substring(0, csvData.indexOf('\n'));
+          if (firstLine.includes(';') && !firstLine.includes(',')) {
+              // If semicolons are found and commas are NOT, replace all.
+              csvData = csvData.replace(/;/g, ',');
+          }
+          // --- END OF AIRTIGHT PRE-PROCESSING ---
+          
+          // Now, parse the *cleaned* CSV data
           workbook = XLSX.read(csvData, { type: 'string', cellDates: true });
+          
         } else {
           // Handle Excel: XLSX.read needs an ArrayBuffer
           const data = new Uint8Array(e.target.result as ArrayBuffer);
-          // --- UPDATED --- Add { cellDates: true }
           workbook = XLSX.read(data, { type: 'array', cellDates: true });
         }
         
@@ -71,24 +85,35 @@ export default function App() {
         }
         const worksheet = workbook.Sheets[sheetName];
         
-        // --- UPDATED --- Add { cellDates: true }
-        // This will now convert Excel date numbers into JavaScript Date objects
         const json: any[] = XLSX.utils.sheet_to_json(worksheet, { cellDates: true });
 
         if (json.length === 0) {
           throw new Error("The uploaded file is empty or in an unsupported format.");
         }
 
-        // Normalize all keys to be lowercase and trimmed for consistent access
+        // --- START OF AIRTIGHT HEADER NORMALIZATION ---
+        // Normalize all keys to be robust against "dirty" headers
         const normalizedJson = json.map(row => {
           const newRow: { [key: string]: any } = {};
           for (const key in row) {
             if (Object.prototype.hasOwnProperty.call(row, key)) {
-              newRow[key.toLowerCase().trim()] = row[key];
+              
+              // 1. Remove all non-ASCII printable characters.
+              // This strips BOM, zero-width spaces, and other "gremlins".
+              const cleanKey = key.replace(/[^\x20-\x7E]/g, ''); 
+              
+              // 2. Normalize to lowercase, trim, and replace all spaces/underscores with a dash.
+              // "Sub Bottler" -> "sub-bottler"
+              // "sub_bottler" -> "sub-bottler"
+              // " sub-bottler " -> "sub-bottler"
+              const normalizedKey = cleanKey.toLowerCase().trim().replace(/[\s_]+/g, '-');
+              
+              newRow[normalizedKey] = row[key];
             }
           }
           return newRow;
         });
+        // --- END OF AIRTIGHT HEADER NORMALIZATION ---
 
         const requiredColumns = ['bottler', 'sub-bottler'];
         const firstRow = normalizedJson[0];
@@ -96,6 +121,7 @@ export default function App() {
         
         for (const col of requiredColumns) {
             if (!availableColumns.includes(col)) {
+                // The error message now shows the *normalized* headers, which is better for debugging
                 throw new Error(`The file is missing the required column: '${col}'. Please ensure your column headers are correct. Found headers: [${availableColumns.join(', ')}].`);
             }
         }
@@ -109,7 +135,8 @@ export default function App() {
           // Iterate over all keys and format dates
           for (const key in row) {
              if (Object.prototype.hasOwnProperty.call(row, key)) {
-                if (key === 'installed date' || key === 'last hit') {
+                // --- UPDATED TO USE NORMALIZED KEYS ---
+                if (key === 'installed-date' || key === 'last-hit') {
                   newRow[key] = formatDate(row[key]);
                 } else {
                   // Ensure all other values are strings
@@ -119,6 +146,8 @@ export default function App() {
           }
 
           // Special handling for subbottler logic
+          // --- UPDATED TO USE NORMALIZED KEYS ---
+          // This logic now correctly reads from the already-normalized keys
           newRow.subbottler = String((String(row['sub-bottler']).toUpperCase() === 'NAN' || !row['sub-bottler']) ? (row.bottler ?? '') : row['sub-bottler']);
           newRow.bottler = String(row.bottler ?? '');
           
